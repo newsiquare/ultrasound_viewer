@@ -25,6 +25,7 @@ npm run dev
 Default env values are configured for:
 
 - Base URL: `/dicom-web` (via Vite proxy to `http://localhost:8042`)
+- Orthanc REST Base: `/orthanc` (thumbnail fallback via Orthanc preview API)
 - Username: `admin`
 - Password: `sonocloud2024`
 

@@ -15,6 +15,7 @@ type AppState = {
   layers: AnnotationLayer[];
   selectedClassId: string;
   setStudies: (studies: Study[]) => void;
+  setStudyThumbnail: (studyInstanceUID: string, thumbnailUrl: string) => void;
   setLoadingStudies: (loading: boolean) => void;
   setSelectedStudy: (study: Study | null) => void;
   setImageIds: (imageIds: string[]) => void;
@@ -75,6 +76,12 @@ export const useAppStore = create<AppState>((set) => ({
   selectedClassId: 'lesion',
 
   setStudies: (studies) => set({ studies }),
+  setStudyThumbnail: (studyInstanceUID, thumbnailUrl) =>
+    set((state) => ({
+      studies: state.studies.map((study) =>
+        study.studyInstanceUID === studyInstanceUID ? { ...study, thumbnailUrl } : study
+      ),
+    })),
   setLoadingStudies: (loadingStudies) => set({ loadingStudies }),
   setSelectedStudy: (selectedStudy) => set({ selectedStudy, currentFrame: 0, isPlaying: false }),
   setImageIds: (imageIds) => set({ imageIds, currentFrame: 0 }),

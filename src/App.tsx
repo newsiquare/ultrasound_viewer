@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SideNav } from './components/SideNav';
 import { StudiesPanel } from './components/StudiesPanel';
 import { TopPatientBar } from './components/TopPatientBar';
@@ -23,6 +23,7 @@ const App = (): JSX.Element => {
     classes,
     layers,
     setStudies,
+    setStudyThumbnail,
     setLoadingStudies,
     setSelectedStudy,
     setImageIds,
@@ -46,11 +47,21 @@ const App = (): JSX.Element => {
   const [viewerError, setViewerError] = useState<string | null>(null);
   const [loadingViewer, setLoadingViewer] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
+  const thumbnailInFlightRef = useRef<Set<string>>(new Set());
+  const thumbnailFailedRef = useRef<Set<string>>(new Set());
+  const thumbnailBlobUrlRef = useRef<Map<string, string>>(new Map());
+  const isUnmountedRef = useRef(false);
 
   useEffect(() => {
     let aborted = false;
 
     const run = async (): Promise<void> => {
+      thumbnailBlobUrlRef.current.forEach((blobUrl) => {
+        URL.revokeObjectURL(blobUrl);
+      });
+      thumbnailBlobUrlRef.current.clear();
+      thumbnailInFlightRef.current.clear();
+      thumbnailFailedRef.current.clear();
       setLoadingStudies(true);
       setStudiesError(null);
       try {
@@ -77,6 +88,82 @@ const App = (): JSX.Element => {
       aborted = true;
     };
   }, [searchTerm, refreshToken, setLoadingStudies, setStudies]);
+
+  useEffect(() => {
+    if (!studies.length) return;
+
+    const pending = studies.filter(
+      (study) =>
+        !study.thumbnailUrl &&
+        !thumbnailInFlightRef.current.has(study.studyInstanceUID) &&
+        !thumbnailFailedRef.current.has(study.studyInstanceUID)
+    );
+
+    if (!pending.length) return;
+
+    let cursor = 0;
+    const workerCount = Math.min(3, pending.length);
+
+    const worker = async (): Promise<void> => {
+      while (!isUnmountedRef.current) {
+        const index = cursor;
+        cursor += 1;
+        if (index >= pending.length) {
+          return;
+        }
+
+        const study = pending[index];
+        thumbnailInFlightRef.current.add(study.studyInstanceUID);
+
+        try {
+          const thumbnailUrl = await orthancClient.getStudyThumbnailBlobUrl(study.studyInstanceUID);
+          if (!thumbnailUrl) {
+            thumbnailFailedRef.current.add(study.studyInstanceUID);
+            continue;
+          }
+
+          if (isUnmountedRef.current) {
+            URL.revokeObjectURL(thumbnailUrl);
+            return;
+          }
+
+          const studyStillExists = useAppStore
+            .getState()
+            .studies.some((item) => item.studyInstanceUID === study.studyInstanceUID);
+          if (!studyStillExists) {
+            URL.revokeObjectURL(thumbnailUrl);
+            continue;
+          }
+
+          const oldUrl = thumbnailBlobUrlRef.current.get(study.studyInstanceUID);
+          if (oldUrl) {
+            URL.revokeObjectURL(oldUrl);
+          }
+          thumbnailBlobUrlRef.current.set(study.studyInstanceUID, thumbnailUrl);
+          setStudyThumbnail(study.studyInstanceUID, thumbnailUrl);
+        } catch (error) {
+          if (!isUnmountedRef.current) {
+            thumbnailFailedRef.current.add(study.studyInstanceUID);
+            console.warn('Thumbnail load failed', error);
+          }
+        } finally {
+          thumbnailInFlightRef.current.delete(study.studyInstanceUID);
+        }
+      }
+    };
+
+    void Promise.all(Array.from({ length: workerCount }, () => worker()));
+  }, [studies, setStudyThumbnail]);
+
+  useEffect(() => {
+    return () => {
+      isUnmountedRef.current = true;
+      thumbnailBlobUrlRef.current.forEach((blobUrl) => {
+        URL.revokeObjectURL(blobUrl);
+      });
+      thumbnailBlobUrlRef.current.clear();
+    };
+  }, []);
 
   const filteredStudies = useMemo(() => {
     if (modalityFilter === 'all') return studies;

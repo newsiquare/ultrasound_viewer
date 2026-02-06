@@ -82,7 +82,13 @@ export const StudiesPanel = ({
             className={`study-card ${selectedStudyUid === study.studyInstanceUID ? 'selected' : ''}`}
             onClick={() => onSelect(study)}
           >
-            <div className="thumb">128 x 128</div>
+            <div className="thumb">
+              {study.thumbnailUrl ? (
+                <img src={study.thumbnailUrl} alt={`${study.patientName} thumbnail`} loading="lazy" />
+              ) : (
+                <span className="thumb-placeholder">128 x 128</span>
+              )}
+            </div>
             <div className="study-meta">
               <p>
                 <strong>Patient:</strong> {study.patientName}

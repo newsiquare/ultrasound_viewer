@@ -48,6 +48,21 @@ export default defineConfig(({ mode }) => {
             });
           },
         },
+        '/orthanc': {
+          target: orthancTarget,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/orthanc/, ''),
+          headers: {
+            Authorization: proxyAuth,
+          },
+          configure: (proxy) => {
+            proxy.on('proxyRes', (proxyRes) => {
+              if (proxyRes.statusCode === 401) {
+                delete proxyRes.headers['www-authenticate'];
+              }
+            });
+          },
+        },
       },
     },
     worker: {
