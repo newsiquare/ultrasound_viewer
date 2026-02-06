@@ -14,6 +14,7 @@ import {
   removeAnnotationLayersByStudy,
   setAnnotationLayerClass,
   setAnnotationLayerVisibility,
+  resetViewport,
   subscribeToAnnotationChanges,
 } from './services/cornerstone';
 import { useAppStore } from './store/useAppStore';
@@ -370,6 +371,7 @@ const App = (): JSX.Element => {
             errorMessage={viewerError}
             selectedStudyName={selectedStudy?.patientName ?? null}
             layers={layers}
+            onReset={resetViewport}
             onToolChange={setActiveTool}
             onFrameChange={setCurrentFrame}
             onFpsChange={setFps}

@@ -14,7 +14,6 @@ import { useEffect, useMemo, useRef } from 'react';
 import {
   createViewport,
   renderStack,
-  resetViewport,
   setCurrentImage,
   setViewerTool,
 } from '../services/cornerstone';
@@ -52,6 +51,7 @@ type Props = {
   errorMessage: string | null;
   selectedStudyName: string | null;
   layers: AnnotationLayer[];
+  onReset: () => void;
   onToolChange: (tool: ViewerTool) => void;
   onFrameChange: (frame: number) => void;
   onFpsChange: (fps: number) => void;
@@ -68,6 +68,7 @@ export const ViewerArea = ({
   errorMessage,
   selectedStudyName,
   layers,
+  onReset,
   onToolChange,
   onFrameChange,
   onFpsChange,
@@ -98,9 +99,6 @@ export const ViewerArea = ({
 
   useEffect(() => {
     setViewerTool(activeTool);
-    if (activeTool === 'Reset') {
-      resetViewport();
-    }
   }, [activeTool]);
 
   useEffect(() => {
@@ -126,7 +124,13 @@ export const ViewerArea = ({
                 key={item}
                 type="button"
                 className={activeTool === item ? 'active' : ''}
-                onClick={() => onToolChange(item)}
+                onClick={() => {
+                  if (item === 'Reset') {
+                    onReset();
+                    return;
+                  }
+                  onToolChange(item);
+                }}
               >
                 {iconForTool(item)}
                 {item}

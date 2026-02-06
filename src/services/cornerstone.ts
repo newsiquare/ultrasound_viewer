@@ -405,7 +405,20 @@ export const resetViewport = (): void => {
   const viewport = renderingEngine.getViewport(VIEWPORT_ID) as Types.IStackViewport | undefined;
   if (!viewport) return;
 
-  viewport.resetCamera();
+  try {
+    // Reset WL/VOI and other viewport properties to defaults.
+    viewport.resetProperties();
+  } catch {
+    // no-op
+  }
+
+  try {
+    // Explicitly reset camera/pan/zoom.
+    viewport.resetCamera({ resetPan: true, resetZoom: true, resetToCenter: true });
+  } catch {
+    // no-op
+  }
+
   viewport.render();
 };
 
