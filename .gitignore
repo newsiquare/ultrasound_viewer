@@ -1,0 +1,10 @@
+_backup/
+node_modules/
+.vscode/
+dist
+.env
+.DS_Store
+.env.example
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts

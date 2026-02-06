@@ -1,0 +1,15 @@
+export type ViewerTool =
+  | 'Reset'
+  | 'Pan'
+  | 'Zoom'
+  | 'W/L'
+  | 'Annotate-Rect'
+  | 'Annotate-Freehand'
+  | 'Annotate-Text'
+  | 'Measure-Length'
+  | 'Measure-Angle'
+  | 'Measure-Rect'
+  | 'Measure-Ellipse'
+  | 'Measure-Bidirectional'
+  | 'LUT'
+  | 'Filter';
