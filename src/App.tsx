@@ -10,6 +10,7 @@ import {
   getAnnotationLayers,
   removeAllAnnotationLayers,
   removeAnnotationLayer,
+  removeAnnotationLayersByStudy,
   setAnnotationLayerVisibility,
   subscribeToAnnotationChanges,
 } from './services/cornerstone';
@@ -165,8 +166,8 @@ const App = (): JSX.Element => {
     const state = useAppStore.getState();
     const classNamesById = Object.fromEntries(state.classes.map((item) => [item.id, item.name]));
     const defaultClassId = state.classes[0]?.id ?? 'unassigned';
-    setLayers(getAnnotationLayers(classNamesById, defaultClassId));
-  }, [setLayers]);
+    setLayers(getAnnotationLayers(classNamesById, defaultClassId, selectedStudy?.studyInstanceUID));
+  }, [selectedStudy?.studyInstanceUID, setLayers]);
 
   useEffect(() => {
     const unsubscribe = subscribeToAnnotationChanges(() => {
@@ -216,8 +217,6 @@ const App = (): JSX.Element => {
   const handleSelectStudy = async (study: Study): Promise<void> => {
     setSelectedStudy(study);
     setImageIds([]);
-    setLayers([]);
-    removeAllAnnotationLayers();
     setViewerError(null);
     setLoadingViewer(true);
     setIsPlaying(false);
@@ -291,8 +290,8 @@ const App = (): JSX.Element => {
   }, []);
 
   const handleClearLayers = useCallback(() => {
-    removeAllAnnotationLayers();
-  }, []);
+    removeAnnotationLayersByStudy(selectedStudy?.studyInstanceUID);
+  }, [selectedStudy?.studyInstanceUID]);
 
   const handleDeleteClass = useCallback(
     (classId: string) => {

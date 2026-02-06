@@ -97,6 +97,53 @@ const parseFrameIndex = (referencedImageId?: string): number => {
   return frame - 1;
 };
 
+type CsAnnotation = {
+  annotationUID?: string;
+  metadata?: {
+    toolName?: string;
+    referencedImageId?: string;
+    referencedImageURI?: string;
+  };
+  data?: Record<string, unknown> & {
+    handles?: { points?: Types.Point3[] };
+    classId?: unknown;
+    label?: unknown;
+    cachedStats?: unknown;
+    studyInstanceUID?: unknown;
+  };
+};
+
+const getAllAnnotations = (): CsAnnotation[] => {
+  return csToolsAnnotation.state.getAllAnnotations() as CsAnnotation[];
+};
+
+const parseStudyInstanceUID = (referencedImageId?: string): string | null => {
+  if (!referencedImageId) return null;
+  const normalized = referencedImageId.replace(/^wadors:/i, '');
+  const match = normalized.match(/\/studies\/([^/]+)/i);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+};
+
+const getAnnotationStudyInstanceUID = (annotation: CsAnnotation): string | null => {
+  const dataStudyUID = annotation.data?.studyInstanceUID;
+  if (typeof dataStudyUID === 'string' && dataStudyUID.trim()) {
+    return dataStudyUID.trim();
+  }
+
+  const referencedImageId =
+    annotation.metadata?.referencedImageId ?? annotation.metadata?.referencedImageURI;
+  const parsedStudyUID = parseStudyInstanceUID(referencedImageId);
+  if (parsedStudyUID && annotation.data) {
+    annotation.data.studyInstanceUID = parsedStudyUID;
+  }
+  return parsedStudyUID;
+};
+
 const extractMeasurement = (cachedStatsValue: unknown): string | undefined => {
   if (!cachedStatsValue || typeof cachedStatsValue !== 'object') return undefined;
   const cachedStats = cachedStatsValue as Record<string, unknown>;
@@ -331,13 +378,10 @@ export const setViewerTool = (tool: ViewerTool): void => {
 
 export const getAnnotationLayers = (
   classNamesById: Record<string, string>,
-  defaultClassId: string
+  defaultClassId: string,
+  selectedStudyInstanceUID?: string
 ): AnnotationLayer[] => {
-  const annotations = csToolsAnnotation.state.getAllAnnotations() as Array<{
-    annotationUID?: string;
-    metadata?: { toolName?: string; referencedImageId?: string; referencedImageURI?: string };
-    data?: Record<string, unknown> & { handles?: { points?: Types.Point3[] } };
-  }>;
+  const annotations = getAllAnnotations();
 
   const layers: AnnotationLayer[] = [];
   annotations.forEach((annotation) => {
@@ -347,6 +391,13 @@ export const getAnnotationLayers = (
 
     const layerTool = TOOL_NAME_TO_LAYER_TOOL.get(toolName);
     if (!layerTool) return;
+
+    const studyInstanceUID = getAnnotationStudyInstanceUID(annotation);
+    if (selectedStudyInstanceUID) {
+      if (!studyInstanceUID || studyInstanceUID !== selectedStudyInstanceUID) {
+        return;
+      }
+    }
 
     const classIdValue = annotation.data?.classId;
     const classId =
@@ -416,6 +467,20 @@ export const removeAnnotationLayer = (annotationUID: string): void => {
 
 export const removeAllAnnotationLayers = (): void => {
   csToolsAnnotation.state.removeAllAnnotations();
+  renderViewport();
+};
+
+export const removeAnnotationLayersByStudy = (studyInstanceUID?: string): void => {
+  if (!studyInstanceUID) return;
+
+  const idsToRemove = getAllAnnotations()
+    .filter((annotation) => getAnnotationStudyInstanceUID(annotation) === studyInstanceUID)
+    .map((annotation) => annotation.annotationUID)
+    .filter((annotationUID): annotationUID is string => Boolean(annotationUID));
+
+  idsToRemove.forEach((annotationUID) => {
+    csToolsAnnotation.state.removeAnnotation(annotationUID);
+  });
   renderViewport();
 };
 
