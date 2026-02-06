@@ -1,9 +1,14 @@
 import { ChevronDown, Eye, EyeOff, Trash2, Download } from 'lucide-react';
-import type { AnnotationClass, AnnotationLayer } from '../types/dicom';
+import type { AnnotationClass, AnnotationExportScope, AnnotationLayer } from '../types/dicom';
 
 type Props = {
   classes: AnnotationClass[];
   layers: AnnotationLayer[];
+  selectedClassId: string;
+  exportScope: AnnotationExportScope;
+  onSelectClass: (classId: string) => void;
+  onChangeLayerClass: (layerId: string, classId: string) => void;
+  onExportScopeChange: (scope: AnnotationExportScope) => void;
   onExportJson: () => void;
   onExportCsv: () => void;
   onToggleClassVisibility: (classId: string) => void;
@@ -19,6 +24,11 @@ type Props = {
 export const AnnotationPanel = ({
   classes,
   layers,
+  selectedClassId,
+  exportScope,
+  onSelectClass,
+  onChangeLayerClass,
+  onExportScopeChange,
   onExportJson,
   onExportCsv,
   onToggleClassVisibility,
@@ -35,6 +45,14 @@ export const AnnotationPanel = ({
       <div className="panel-header with-actions">
         <h2>Annotations</h2>
         <div className="header-actions">
+          <select
+            value={exportScope}
+            onChange={(event) => onExportScopeChange(event.target.value as AnnotationExportScope)}
+            title="Export scope"
+          >
+            <option value="current">Current study</option>
+            <option value="all">All studies</option>
+          </select>
           <button type="button" onClick={onExportJson}>
             <Download size={14} /> JSON
           </button>
@@ -48,7 +66,7 @@ export const AnnotationPanel = ({
         <div className="annotation-title">
           <div>
             <ChevronDown size={14} />
-            <h3>Class List</h3>
+            <h3>Category List</h3>
           </div>
           <div>
             <button type="button" onClick={() => onSetAllClassesVisibility(true)} title="Show all">
@@ -65,11 +83,14 @@ export const AnnotationPanel = ({
 
         <div className="annotation-list">
           {classes.map((item) => (
-            <div key={item.id} className="annotation-row">
-              <div className="row-main">
+            <div
+              key={item.id}
+              className={`annotation-row category-row ${selectedClassId === item.id ? 'selected' : ''}`}
+            >
+              <button type="button" className="row-main row-main-btn" onClick={() => onSelectClass(item.id)}>
                 <span className="color-dot" style={{ backgroundColor: item.color }} />
                 <span>{item.name}</span>
-              </div>
+              </button>
               <div className="row-actions">
                 <button type="button" onClick={() => onToggleClassVisibility(item.id)}>
                   {item.visible ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -108,6 +129,17 @@ export const AnnotationPanel = ({
               <div className="row-main">
                 <span className="tool-pill">{item.tool}</span>
                 <span>{item.label}</span>
+                <select
+                  value={item.classId}
+                  onChange={(event) => onChangeLayerClass(item.id, event.target.value)}
+                  title="Change category"
+                >
+                  {classes.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="row-actions">
                 <button type="button" onClick={() => onToggleLayerVisibility(item.id)}>

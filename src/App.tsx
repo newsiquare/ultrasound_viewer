@@ -7,16 +7,18 @@ import { AnnotationPanel } from './components/AnnotationPanel';
 import { orthancClient } from './services/orthancDicomweb';
 import {
   cacheWadorsMetadata,
+  getAnnotationExportRecords,
   getAnnotationLayers,
   removeAllAnnotationLayers,
   removeAnnotationLayer,
   removeAnnotationLayersByStudy,
+  setAnnotationLayerClass,
   setAnnotationLayerVisibility,
   subscribeToAnnotationChanges,
 } from './services/cornerstone';
 import { useAppStore } from './store/useAppStore';
 import { exportAnnotationCsv, exportAnnotationJson, exportCocoJson } from './utils/exporters';
-import type { Series, Study } from './types/dicom';
+import type { AnnotationExportScope, Series, Study } from './types/dicom';
 
 const App = (): JSX.Element => {
   const {
@@ -30,6 +32,8 @@ const App = (): JSX.Element => {
     activeTool,
     classes,
     layers,
+    selectedClassId,
+    setSelectedClassId,
     setLayers,
     setStudies,
     setStudyThumbnail,
@@ -54,6 +58,7 @@ const App = (): JSX.Element => {
   const [viewerError, setViewerError] = useState<string | null>(null);
   const [loadingViewer, setLoadingViewer] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
+  const [exportScope, setExportScope] = useState<AnnotationExportScope>('current');
   const thumbnailInFlightRef = useRef<Set<string>>(new Set());
   const thumbnailFailedRef = useRef<Set<string>>(new Set());
   const thumbnailBlobUrlRef = useRef<Map<string, string>>(new Map());
@@ -165,7 +170,7 @@ const App = (): JSX.Element => {
   const syncLayersFromCornerstone = useCallback(() => {
     const state = useAppStore.getState();
     const classNamesById = Object.fromEntries(state.classes.map((item) => [item.id, item.name]));
-    const defaultClassId = state.classes[0]?.id ?? 'unassigned';
+    const defaultClassId = state.selectedClassId || state.classes[0]?.id || 'unassigned';
     setLayers(getAnnotationLayers(classNamesById, defaultClassId, selectedStudy?.studyInstanceUID));
   }, [selectedStudy?.studyInstanceUID, setLayers]);
 
@@ -289,6 +294,15 @@ const App = (): JSX.Element => {
     removeAnnotationLayer(layerId);
   }, []);
 
+  const handleChangeLayerClass = useCallback(
+    (layerId: string, classId: string) => {
+      const className = classes.find((item) => item.id === classId)?.name;
+      setAnnotationLayerClass(layerId, classId, className);
+      syncLayersFromCornerstone();
+    },
+    [classes, syncLayersFromCornerstone]
+  );
+
   const handleClearLayers = useCallback(() => {
     removeAnnotationLayersByStudy(selectedStudy?.studyInstanceUID);
   }, [selectedStudy?.studyInstanceUID]);
@@ -310,6 +324,11 @@ const App = (): JSX.Element => {
     clearClasses();
   }, [clearClasses]);
 
+  const collectExportRecords = useCallback(() => {
+    const scopedStudyUID = exportScope === 'current' ? selectedStudy?.studyInstanceUID : undefined;
+    return getAnnotationExportRecords(classes, { studyInstanceUID: scopedStudyUID });
+  }, [classes, exportScope, selectedStudy?.studyInstanceUID]);
+
   return (
     <div className="app-root">
       <SideNav />
@@ -317,7 +336,11 @@ const App = (): JSX.Element => {
       <div className="app-main">
         <TopPatientBar
           study={selectedStudy}
-          onExportCoco={() => exportCocoJson(selectedStudy, layers, classes)}
+          exportScope={exportScope}
+          onExportCoco={() => {
+            const records = collectExportRecords();
+            exportCocoJson(records, classes, studies, exportScope);
+          }}
         />
 
         <div className="content-grid">
@@ -356,8 +379,23 @@ const App = (): JSX.Element => {
           <AnnotationPanel
             classes={classes}
             layers={layers}
-            onExportJson={() => exportAnnotationJson(classes, layers)}
-            onExportCsv={() => exportAnnotationCsv(layers)}
+            selectedClassId={selectedClassId}
+            exportScope={exportScope}
+            onSelectClass={setSelectedClassId}
+            onChangeLayerClass={handleChangeLayerClass}
+            onExportScopeChange={setExportScope}
+            onExportJson={() => {
+              const records = collectExportRecords();
+              const scopedStudies =
+                exportScope === 'current'
+                  ? studies.filter((item) => item.studyInstanceUID === selectedStudy?.studyInstanceUID)
+                  : studies;
+              exportAnnotationJson(classes, records, scopedStudies, exportScope);
+            }}
+            onExportCsv={() => {
+              const records = collectExportRecords();
+              exportAnnotationCsv(records, exportScope);
+            }}
             onToggleClassVisibility={toggleClassVisibility}
             onToggleLayerVisibility={toggleLayerVisibility}
             onSetAllClassesVisibility={setAllClassVisibility}

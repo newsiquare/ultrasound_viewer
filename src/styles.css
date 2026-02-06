@@ -477,6 +477,7 @@ select {
 }
 
 .header-actions button,
+.header-actions select,
 .annotation-title button,
 .row-actions button {
   border: 1px solid rgba(130, 154, 194, 0.35);
@@ -487,6 +488,10 @@ select {
   align-items: center;
   gap: 4px;
   cursor: pointer;
+}
+
+.header-actions select {
+  min-width: 118px;
 }
 
 .annotation-block {
@@ -534,6 +539,29 @@ select {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.row-main select {
+  border: 1px solid rgba(130, 154, 194, 0.35);
+  border-radius: 8px;
+  background: rgba(25, 39, 67, 0.7);
+  padding: 3px 6px;
+}
+
+.row-main-btn {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+}
+
+.category-row.selected {
+  border-color: rgba(54, 205, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(54, 205, 255, 0.35) inset;
 }
 
 .color-dot {

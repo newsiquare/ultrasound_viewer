@@ -24,7 +24,7 @@ import {
   annotation as csToolsAnnotation,
   init as initCornerstoneTools,
 } from '@cornerstonejs/tools';
-import type { AnnotationLayer } from '../types/dicom';
+import type { AnnotationClass, AnnotationExportRecord, AnnotationLayer } from '../types/dicom';
 import type { ViewerTool } from '../types/tools';
 
 type CornerstoneGlobalState = typeof globalThis & {
@@ -110,6 +110,7 @@ type CsAnnotation = {
     label?: unknown;
     cachedStats?: unknown;
     studyInstanceUID?: unknown;
+    exportBbox?: unknown;
   };
 };
 
@@ -142,6 +143,46 @@ const getAnnotationStudyInstanceUID = (annotation: CsAnnotation): string | null 
     annotation.data.studyInstanceUID = parsedStudyUID;
   }
   return parsedStudyUID;
+};
+
+const parseReferencedUids = (
+  referencedImageId?: string
+): {
+  studyInstanceUID: string;
+  seriesInstanceUID: string;
+  sopInstanceUID: string;
+  frameIndex: number;
+} | null => {
+  if (!referencedImageId) return null;
+  const normalized = referencedImageId.replace(/^wadors:/i, '');
+  const match = normalized.match(
+    /\/studies\/([^/]+)\/series\/([^/]+)\/instances\/([^/]+)(?:\/frames\/(\d+))?/i
+  );
+  if (!match) return null;
+
+  const decode = (value: string): string => {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  };
+
+  const frame = match[4] ? Number(match[4]) : 1;
+  return {
+    studyInstanceUID: decode(match[1]),
+    seriesInstanceUID: decode(match[2]),
+    sopInstanceUID: decode(match[3]),
+    frameIndex: Number.isFinite(frame) && frame > 0 ? frame - 1 : 0,
+  };
+};
+
+const getStoredBbox = (annotation: CsAnnotation): [number, number, number, number] | null => {
+  const raw = annotation.data?.exportBbox;
+  if (!Array.isArray(raw) || raw.length !== 4) return null;
+  const values = raw.map((item) => Number(item));
+  if (values.some((item) => !Number.isFinite(item))) return null;
+  return [values[0], values[1], values[2], values[3]];
 };
 
 const extractMeasurement = (cachedStatsValue: unknown): string | undefined => {
@@ -217,6 +258,17 @@ const renderViewport = (): void => {
   if (!renderingEngine) return;
   const viewport = renderingEngine.getViewport(VIEWPORT_ID) as Types.IStackViewport | undefined;
   viewport?.render();
+};
+
+const getCurrentViewportStudyInstanceUID = (): string | null => {
+  const renderingEngine = getRenderingEngine(RENDERING_ENGINE_ID);
+  if (!renderingEngine) return null;
+  const viewport = renderingEngine.getViewport(VIEWPORT_ID) as
+    | (Types.IStackViewport & { getCurrentImageId?: () => string | undefined })
+    | undefined;
+  if (!viewport || typeof viewport.getCurrentImageId !== 'function') return null;
+  const currentImageId = viewport.getCurrentImageId();
+  return parseStudyInstanceUID(currentImageId);
 };
 
 const registerTools = (): void => {
@@ -415,6 +467,10 @@ export const getAnnotationLayers = (
       annotation.metadata?.referencedImageId ?? annotation.metadata?.referencedImageURI;
     const frameIndex = parseFrameIndex(referencedImageId);
     const visible = csToolsAnnotation.visibility.isAnnotationVisible(annotationUID) !== false;
+    const bbox = getAnnotationBoundingBox(annotation);
+    if (annotation.data) {
+      annotation.data.exportBbox = bbox;
+    }
 
     layers.push({
       id: annotationUID,
@@ -422,13 +478,94 @@ export const getAnnotationLayers = (
       label,
       frameIndex,
       visible,
-      bbox: getAnnotationBoundingBox(annotation),
+      bbox,
       measurement: extractMeasurement(annotation.data?.cachedStats),
       classId,
     });
   });
 
   return layers.sort((a, b) => a.frameIndex - b.frameIndex);
+};
+
+export const getAnnotationExportRecords = (
+  classes: AnnotationClass[],
+  options?: { studyInstanceUID?: string }
+): AnnotationExportRecord[] => {
+  const classById = new Map(classes.map((item) => [item.id, item]));
+  const defaultClass = classes[0];
+
+  const records: AnnotationExportRecord[] = [];
+  const currentViewportStudyUID = getCurrentViewportStudyInstanceUID();
+  getAllAnnotations().forEach((annotation) => {
+    const annotationUID = annotation.annotationUID;
+    const toolName = annotation.metadata?.toolName;
+    if (!annotationUID || !toolName) return;
+
+    const tool = TOOL_NAME_TO_LAYER_TOOL.get(toolName);
+    if (!tool) return;
+
+    const referencedImageId =
+      annotation.metadata?.referencedImageId ?? annotation.metadata?.referencedImageURI;
+    const referenced = parseReferencedUids(referencedImageId);
+    if (!referenced) return;
+
+    if (options?.studyInstanceUID && referenced.studyInstanceUID !== options.studyInstanceUID) {
+      return;
+    }
+
+    const classIdRaw = annotation.data?.classId;
+    const classId =
+      typeof classIdRaw === 'string' && classIdRaw.trim()
+        ? classIdRaw.trim()
+        : defaultClass?.id ?? 'unassigned';
+    const classInfo = classById.get(classId);
+
+    const labelRaw = annotation.data?.label;
+    const label =
+      typeof labelRaw === 'string' && labelRaw.trim()
+        ? labelRaw.trim()
+        : `${classInfo?.name ?? classId} ${tool}`;
+    const visible = csToolsAnnotation.visibility.isAnnotationVisible(annotationUID) !== false;
+
+    const storedBbox = getStoredBbox(annotation);
+    let bbox = storedBbox ?? [0, 0, 0, 0];
+    if (currentViewportStudyUID && referenced.studyInstanceUID === currentViewportStudyUID) {
+      const liveBbox = getAnnotationBoundingBox(annotation);
+      bbox = liveBbox[2] > 0 && liveBbox[3] > 0 ? liveBbox : bbox;
+    }
+    if (annotation.data) {
+      annotation.data.exportBbox = bbox;
+    }
+
+    records.push({
+      id: annotationUID,
+      studyInstanceUID: referenced.studyInstanceUID,
+      seriesInstanceUID: referenced.seriesInstanceUID,
+      sopInstanceUID: referenced.sopInstanceUID,
+      frameIndex: referenced.frameIndex,
+      tool,
+      label,
+      classId,
+      className: classInfo?.name ?? classId,
+      classColor: classInfo?.color ?? '#ffffff',
+      visible,
+      bbox,
+      measurement: extractMeasurement(annotation.data?.cachedStats),
+    });
+  });
+
+  return records.sort((a, b) => {
+    if (a.studyInstanceUID !== b.studyInstanceUID) {
+      return a.studyInstanceUID.localeCompare(b.studyInstanceUID);
+    }
+    if (a.seriesInstanceUID !== b.seriesInstanceUID) {
+      return a.seriesInstanceUID.localeCompare(b.seriesInstanceUID);
+    }
+    if (a.sopInstanceUID !== b.sopInstanceUID) {
+      return a.sopInstanceUID.localeCompare(b.sopInstanceUID);
+    }
+    return a.frameIndex - b.frameIndex;
+  });
 };
 
 export const subscribeToAnnotationChanges = (onChange: () => void): (() => void) => {
@@ -457,6 +594,28 @@ export const subscribeToAnnotationChanges = (onChange: () => void): (() => void)
 
 export const setAnnotationLayerVisibility = (annotationUID: string, visible: boolean): void => {
   csToolsAnnotation.visibility.setAnnotationVisibility(annotationUID, visible);
+  renderViewport();
+};
+
+export const setAnnotationLayerClass = (
+  annotationUID: string,
+  classId: string,
+  className?: string
+): void => {
+  const annotation = csToolsAnnotation.state.getAnnotation(annotationUID) as CsAnnotation | undefined;
+  if (!annotation) return;
+  if (!annotation.data) {
+    annotation.data = {};
+  }
+
+  annotation.data.classId = classId;
+  const existingLabel = annotation.data.label;
+  if (typeof existingLabel !== 'string' || !existingLabel.trim()) {
+    const toolName = annotation.metadata?.toolName;
+    const layerTool = toolName ? TOOL_NAME_TO_LAYER_TOOL.get(toolName) : undefined;
+    annotation.data.label = `${className ?? classId} ${layerTool ?? 'Annotation'}`;
+  }
+
   renderViewport();
 };
 

@@ -14,6 +14,7 @@ type AppState = {
   classes: AnnotationClass[];
   layers: AnnotationLayer[];
   selectedClassId: string;
+  setSelectedClassId: (classId: string) => void;
   setLayers: (layers: AnnotationLayer[]) => void;
   setStudies: (studies: Study[]) => void;
   setStudyThumbnail: (studyInstanceUID: string, thumbnailUrl: string) => void;
@@ -35,9 +36,9 @@ type AppState = {
 };
 
 const initialClasses: AnnotationClass[] = [
-  { id: 'lesion', name: 'Lesion', color: '#ff6b6b', visible: true },
-  { id: 'vessel', name: 'Vessel', color: '#4dabf7', visible: true },
-  { id: 'calcification', name: 'Calcification', color: '#ffd43b', visible: true },
+  { id: 'thrombus', name: 'thrombus', color: '#ff6b6b', visible: true },
+  { id: 'plaque', name: 'plaque', color: '#4dabf7', visible: true },
+  { id: 'calcification', name: 'calcification', color: '#ffd43b', visible: true },
 ];
 
 export const useAppStore = create<AppState>((set) => ({
@@ -53,6 +54,7 @@ export const useAppStore = create<AppState>((set) => ({
   layers: [],
   selectedClassId: 'lesion',
 
+  setSelectedClassId: (selectedClassId) => set({ selectedClassId }),
   setLayers: (layers) => set({ layers }),
   setStudies: (studies) => set({ studies }),
   setStudyThumbnail: (studyInstanceUID, thumbnailUrl) =>
@@ -97,11 +99,15 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => ({
       classes: state.classes.filter((item) => item.id !== classId),
       layers: state.layers.filter((layer) => layer.classId !== classId),
+      selectedClassId:
+        state.selectedClassId === classId
+          ? state.classes.find((item) => item.id !== classId)?.id ?? ''
+          : state.selectedClassId,
     })),
   deleteLayer: (layerId) =>
     set((state) => ({
       layers: state.layers.filter((item) => item.id !== layerId),
     })),
-  clearClasses: () => set({ classes: [], layers: [] }),
+  clearClasses: () => set({ classes: [], layers: [], selectedClassId: '' }),
   clearLayers: () => set({ layers: [] }),
 }));

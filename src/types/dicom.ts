@@ -38,3 +38,21 @@ export type AnnotationLayer = {
   measurement?: string;
   classId: string;
 };
+
+export type AnnotationExportScope = 'current' | 'all';
+
+export type AnnotationExportRecord = {
+  id: string;
+  studyInstanceUID: string;
+  seriesInstanceUID: string;
+  sopInstanceUID: string;
+  frameIndex: number;
+  tool: AnnotationLayer['tool'];
+  label: string;
+  classId: string;
+  className: string;
+  classColor: string;
+  visible: boolean;
+  bbox: [number, number, number, number];
+  measurement?: string;
+};
