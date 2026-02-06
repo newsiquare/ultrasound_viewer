@@ -11,7 +11,13 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
-import { createViewport, renderStack, resetViewport, setCurrentImage } from '../services/cornerstone';
+import {
+  createViewport,
+  renderStack,
+  resetViewport,
+  setCurrentImage,
+  setViewerTool,
+} from '../services/cornerstone';
 import type { ViewerTool } from '../types/tools';
 import type { AnnotationLayer } from '../types/dicom';
 
@@ -91,6 +97,7 @@ export const ViewerArea = ({
   }, [currentFrame, imageIds]);
 
   useEffect(() => {
+    setViewerTool(activeTool);
     if (activeTool === 'Reset') {
       resetViewport();
     }

@@ -14,6 +14,7 @@ type AppState = {
   classes: AnnotationClass[];
   layers: AnnotationLayer[];
   selectedClassId: string;
+  setLayers: (layers: AnnotationLayer[]) => void;
   setStudies: (studies: Study[]) => void;
   setStudyThumbnail: (studyInstanceUID: string, thumbnailUrl: string) => void;
   setLoadingStudies: (loading: boolean) => void;
@@ -39,29 +40,6 @@ const initialClasses: AnnotationClass[] = [
   { id: 'calcification', name: 'Calcification', color: '#ffd43b', visible: true },
 ];
 
-const initialLayers: AnnotationLayer[] = [
-  {
-    id: 'layer-1',
-    tool: 'Rectangle',
-    label: 'Lesion ROI',
-    frameIndex: 12,
-    visible: true,
-    bbox: [120, 90, 84, 61],
-    measurement: '2.1 cm x 1.3 cm',
-    classId: 'lesion',
-  },
-  {
-    id: 'layer-2',
-    tool: 'Length',
-    label: 'Vessel Diameter',
-    frameIndex: 14,
-    visible: true,
-    bbox: [228, 172, 44, 20],
-    measurement: '4.2 mm',
-    classId: 'vessel',
-  },
-];
-
 export const useAppStore = create<AppState>((set) => ({
   studies: [],
   loadingStudies: false,
@@ -72,9 +50,10 @@ export const useAppStore = create<AppState>((set) => ({
   isPlaying: false,
   activeTool: 'Pan',
   classes: initialClasses,
-  layers: initialLayers,
+  layers: [],
   selectedClassId: 'lesion',
 
+  setLayers: (layers) => set({ layers }),
   setStudies: (studies) => set({ studies }),
   setStudyThumbnail: (studyInstanceUID, thumbnailUrl) =>
     set((state) => ({

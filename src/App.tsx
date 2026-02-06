@@ -5,7 +5,14 @@ import { TopPatientBar } from './components/TopPatientBar';
 import { ViewerArea } from './components/ViewerArea';
 import { AnnotationPanel } from './components/AnnotationPanel';
 import { orthancClient } from './services/orthancDicomweb';
-import { cacheWadorsMetadata } from './services/cornerstone';
+import {
+  cacheWadorsMetadata,
+  getAnnotationLayers,
+  removeAllAnnotationLayers,
+  removeAnnotationLayer,
+  setAnnotationLayerVisibility,
+  subscribeToAnnotationChanges,
+} from './services/cornerstone';
 import { useAppStore } from './store/useAppStore';
 import { exportAnnotationCsv, exportAnnotationJson, exportCocoJson } from './utils/exporters';
 import type { Series, Study } from './types/dicom';
@@ -22,6 +29,7 @@ const App = (): JSX.Element => {
     activeTool,
     classes,
     layers,
+    setLayers,
     setStudies,
     setStudyThumbnail,
     setLoadingStudies,
@@ -36,9 +44,7 @@ const App = (): JSX.Element => {
     setAllClassVisibility,
     setAllLayerVisibility,
     deleteClass,
-    deleteLayer,
     clearClasses,
-    clearLayers,
   } = useAppStore();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -155,6 +161,35 @@ const App = (): JSX.Element => {
     void Promise.all(Array.from({ length: workerCount }, () => worker()));
   }, [studies, setStudyThumbnail]);
 
+  const syncLayersFromCornerstone = useCallback(() => {
+    const state = useAppStore.getState();
+    const classNamesById = Object.fromEntries(state.classes.map((item) => [item.id, item.name]));
+    const defaultClassId = state.classes[0]?.id ?? 'unassigned';
+    setLayers(getAnnotationLayers(classNamesById, defaultClassId));
+  }, [setLayers]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToAnnotationChanges(() => {
+      syncLayersFromCornerstone();
+    });
+    syncLayersFromCornerstone();
+    return () => {
+      unsubscribe();
+    };
+  }, [syncLayersFromCornerstone]);
+
+  useEffect(() => {
+    syncLayersFromCornerstone();
+  }, [classes, syncLayersFromCornerstone]);
+
+  useEffect(() => {
+    const classVisibility = new Map(classes.map((item) => [item.id, item.visible]));
+    layers.forEach((layer) => {
+      const classVisible = classVisibility.get(layer.classId) ?? true;
+      setAnnotationLayerVisibility(layer.id, layer.visible && classVisible);
+    });
+  }, [classes, layers]);
+
   useEffect(() => {
     return () => {
       isUnmountedRef.current = true;
@@ -181,6 +216,8 @@ const App = (): JSX.Element => {
   const handleSelectStudy = async (study: Study): Promise<void> => {
     setSelectedStudy(study);
     setImageIds([]);
+    setLayers([]);
+    removeAllAnnotationLayers();
     setViewerError(null);
     setLoadingViewer(true);
     setIsPlaying(false);
@@ -249,6 +286,31 @@ const App = (): JSX.Element => {
     }
   };
 
+  const handleDeleteLayer = useCallback((layerId: string) => {
+    removeAnnotationLayer(layerId);
+  }, []);
+
+  const handleClearLayers = useCallback(() => {
+    removeAllAnnotationLayers();
+  }, []);
+
+  const handleDeleteClass = useCallback(
+    (classId: string) => {
+      layers
+        .filter((layer) => layer.classId === classId)
+        .forEach((layer) => {
+          removeAnnotationLayer(layer.id);
+        });
+      deleteClass(classId);
+    },
+    [deleteClass, layers]
+  );
+
+  const handleClearClasses = useCallback(() => {
+    removeAllAnnotationLayers();
+    clearClasses();
+  }, [clearClasses]);
+
   return (
     <div className="app-root">
       <SideNav />
@@ -301,10 +363,10 @@ const App = (): JSX.Element => {
             onToggleLayerVisibility={toggleLayerVisibility}
             onSetAllClassesVisibility={setAllClassVisibility}
             onSetAllLayersVisibility={setAllLayerVisibility}
-            onDeleteClass={deleteClass}
-            onDeleteLayer={deleteLayer}
-            onClearClasses={clearClasses}
-            onClearLayers={clearLayers}
+            onDeleteClass={handleDeleteClass}
+            onDeleteLayer={handleDeleteLayer}
+            onClearClasses={handleClearClasses}
+            onClearLayers={handleClearLayers}
           />
         </div>
       </div>
